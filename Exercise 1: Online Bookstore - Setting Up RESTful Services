@@ -1,0 +1,55 @@
+Step 1: Initialize the Spring Boot Project
+Using Spring Initializr:
+Visit Spring Initializr.
+
+Set the following options:
+
+Project: Maven Project
+Language: Java
+Spring Boot: 3.x.x
+Project Metadata:
+Group: com.example
+Artifact: bookstoreapi
+Name: BookstoreAPI
+Package Name: com.example.bookstoreapi
+Dependencies:
+Spring Web
+Lombok
+Spring Boot DevTools
+Download the generated project and unzip it.
+
+Step 2: Import the Project
+Open your IDE:
+Import the project as a Maven project.
+Let the IDE download the necessary dependencies.
+
+Step 3: Understanding the Project Structure
+package com.example.bookstoreapi;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class BookstoreApiApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(BookstoreApiApplication.class, args);
+    }
+}
+
+Step 4: Creating a Basic REST Controller
+package com.example.bookstoreapi.controller;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/books")
+public class BookController {
+
+    @GetMapping
+    public String getAllBooks() {
+        return "List of all books";
+    }
+}

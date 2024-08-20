@@ -1,0 +1,118 @@
+Step 1: Implementing a POST Endpoint to Create a New Customer Using a JSON Request Body
+package com.example.bookstoreapi.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+public class Customer {
+    private Long id;
+    private String name;
+    private String email;
+    private String password;
+}
+Create the CustomerController Class:
+package com.example.bookstoreapi.controller;
+
+import com.example.bookstoreapi.model.Customer;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/customers")
+public class CustomerController {
+
+    private List<Customer> customers = new ArrayList<>();
+
+    
+    @PostMapping
+    public ResponseEntity<Customer> createCustomer(@RequestBody Customer customer) {
+        customer.setId((long) (customers.size() + 1));
+        customers.add(customer);
+        return ResponseEntity.status(HttpStatus.CREATED).body(customer);
+    }
+}
+Step 2: Implementing an Endpoint to Process Form Data for Customer Registrations
+@PostMapping("/register")
+public ResponseEntity<Customer> registerCustomer(@RequestParam String name,
+                                                 @RequestParam String email,
+                                                 @RequestParam String password) {
+    Customer customer = new Customer((long) (customers.size() + 1), name, email, password);
+    customers.add(customer);
+    return ResponseEntity.status(HttpStatus.CREATED).body(customer);
+}
+Full CustomerController Class
+package com.example.bookstoreapi.controller;
+
+import com.example.bookstoreapi.model.Customer;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/customers")
+public class CustomerController {
+
+    private List<Customer> customers = new ArrayList<>();
+
+    
+    @PostMapping
+    public ResponseEntity<Customer> createCustomer(@RequestBody Customer customer) {
+        customer.setId((long) (customers.size() + 1));
+        customers.add(customer);
+        return ResponseEntity.status(HttpStatus.CREATED).body(customer);
+    }
+
+    
+    @PostMapping("/register")
+    public ResponseEntity<Customer> registerCustomer(@RequestParam String name,
+                                                     @RequestParam String email,
+                                                     @RequestParam String password) {
+        Customer customer = new Customer((long) (customers.size() + 1), name, email, password);
+        customers.add(customer);
+        return ResponseEntity.status(HttpStatus.CREATED).body(customer);
+    }
+}
+
+Sample Test Using Postman or Curl
+Create a Customer with JSON Request Body:
+
+URL: http://localhost:8080/api/customers
+Method: POST
+{
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "password": "securepassword"
+}
+Response:
+{
+    "id": 1,
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "password": "securepassword"
+}
+Register a Customer with Form Data:
+
+URL: http://localhost:8080/api/customers/register
+Method: POST
+Response:
+{
+    "id": 2,
+    "name": "Jane Doe",
+    "email": "jane.doe@example.com",
+    "password": "anothersecurepassword"
+}
+
+
+
+

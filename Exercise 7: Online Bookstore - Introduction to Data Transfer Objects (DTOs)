@@ -1,0 +1,264 @@
+Step 1: Creating DTOs for Books and Customers
+package com.example.bookstoreapi.dto;
+
+public class BookDTO {
+    private Long id;
+    private String title;
+    private String author;
+    private double price;
+    private String isbn;
+
+   
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public String getAuthor() {
+        return author;
+    }
+
+    public void setAuthor(String author) {
+        this.author = author;
+    }
+
+    public double getPrice() {
+        return price;
+    }
+
+    public void setPrice(double price) {
+        this.price = price;
+    }
+
+    public String getIsbn() {
+        return isbn;
+    }
+
+    public void setIsbn(String isbn) {
+        this.isbn = isbn;
+    }
+}
+
+package com.example.bookstoreapi.dto;
+
+public class CustomerDTO {
+    private Long id;
+    private String name;
+    private String email;
+    private String phoneNumber;
+
+    // Getters and Setters
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPhoneNumber() {
+        return phoneNumber;
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
+}
+Step 2: Mapping Entities to DTOs Using MapStruct
+<dependency>
+    <groupId>org.mapstruct</groupId>
+    <artifactId>mapstruct</artifactId>
+    <version>1.5.5.Final</version>
+</dependency>
+<dependency>
+    <groupId>org.mapstruct</groupId>
+    <artifactId>mapstruct-processor</artifactId>
+    <version>1.5.5.Final</version>
+    <scope>provided</scope>
+</dependency>
+Create Mapper Interfaces for Books and Customers
+package com.example.bookstoreapi.mapper;
+
+import com.example.bookstoreapi.dto.BookDTO;
+import com.example.bookstoreapi.model.Book;
+import org.mapstruct.Mapper;
+import org.mapstruct.factory.Mappers;
+
+@Mapper
+public interface BookMapper {
+    BookMapper INSTANCE = Mappers.getMapper(BookMapper.class);
+
+    BookDTO bookToBookDTO(Book book);
+    Book bookDTOToBook(BookDTO bookDTO);
+}
+package com.example.bookstoreapi.mapper;
+
+import com.example.bookstoreapi.dto.CustomerDTO;
+import com.example.bookstoreapi.model.Customer;
+import org.mapstruct.Mapper;
+import org.mapstruct.factory.Mappers;
+
+@Mapper
+public interface CustomerMapper {
+    CustomerMapper INSTANCE = Mappers.getMapper(CustomerMapper.class);
+
+    CustomerDTO customerToCustomerDTO(Customer customer);
+    Customer customerDTOToCustomer(CustomerDTO customerDTO);
+}
+Step 3: Custom Serialization/Deserialization with Jackson
+package com.example.bookstoreapi.dto;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonPropertyOrder({"id", "title", "author", "price", "isbn"})
+public class BookDTO {
+    private Long id;
+
+    @JsonProperty("book_title")
+    private String title;
+
+    private String author;
+
+    @JsonSerialize(using = CustomPriceSerializer.class)
+    private double price;
+
+    private String isbn;
+
+    
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public String getAuthor() {
+        return author;
+    }
+
+    public void setAuthor(String author) {
+        this.author = author;
+    }
+
+    public double getPrice() {
+        return price;
+    }
+
+    public void setPrice(double price) {
+        this.price = price;
+    }
+
+    public String getIsbn() {
+        return isbn;
+    }
+
+    public void setIsbn(String isbn) {
+        this.isbn = isbn;
+    }
+}
+
+Custom Price Serializer
+package com.example.bookstoreapi.dto;
+
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.SerializerProvider;
+
+import java.io.IOException;
+import java.text.DecimalFormat;
+
+public class CustomPriceSerializer extends JsonSerializer<Double> {
+    private static final DecimalFormat df = new DecimalFormat("0.00");
+
+    @Override
+    public void serialize(Double value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+        gen.writeString(df.format(value));
+    }
+}
+Step 4: Using the DTOs in the Controller
+package com.example.bookstoreapi.controller;
+
+import com.example.bookstoreapi.dto.BookDTO;
+import com.example.bookstoreapi.mapper.BookMapper;
+import com.example.bookstoreapi.model.Book;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/api/books")
+public class BookController {
+
+    private List<Book> books = new ArrayList<>();
+    private final BookMapper bookMapper = BookMapper.INSTANCE;
+
+    public BookController() {
+        books.add(new Book(1L, "The Great Gatsby", "F. Scott Fitzgerald", 10.99, "9780743273565"));
+        books.add(new Book(2L, "1984", "George Orwell", 8.99, "9780451524935"));
+    }
+
+    
+    @GetMapping
+    public ResponseEntity<List<BookDTO>> getAllBooks() {
+        List<BookDTO> bookDTOs = books.stream()
+                .map(bookMapper::bookToBookDTO)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(bookDTOs);
+    }
+
+    
+    @PostMapping
+    public ResponseEntity<BookDTO> createBook(@RequestBody BookDTO bookDTO) {
+        Book book = bookMapper.bookDTOToBook(bookDTO);
+        book.setId((long) (books.size() + 1));
+        books.add(book);
+        return new ResponseEntity<>(bookMapper.bookToBookDTO(book), HttpStatus.CREATED);
+    }
+}
+
+

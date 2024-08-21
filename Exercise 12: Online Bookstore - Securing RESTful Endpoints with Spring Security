@@ -1,0 +1,336 @@
+1. Add Dependencies
+
+<dependencies>
+    <!-- Spring Boot Starter Security -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+
+    <!-- JWT Support -->
+    <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt</artifactId>
+        <version>0.9.1</version>
+    </dependency>
+
+    <!-- Other dependencies like Spring Boot Starter Web, etc. -->
+</dependencies>
+
+
+2. Create JWT Utility Class
+
+package com.bookstoreapi.security;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import org.springframework.stereotype.Component;
+
+import java.util.Date;
+import java.util.function.Function;
+
+@Component
+public class JwtUtil {
+
+    private String SECRET_KEY = "your_secret_key";
+
+    public String extractUsername(String token) {
+        return extractClaim(token, Claims::getSubject);
+    }
+
+    public Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
+
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+
+    private Claims extractAllClaims(String token) {
+        return Jwts.parser().setSigningKey(SECRET_KEY).parseClaimsJws(token).getBody();
+    }
+
+    private Boolean isTokenExpired(String token) {
+        return extractExpiration(token).before(new Date());
+    }
+
+    public String generateToken(String username) {
+        return createToken(username);
+    }
+
+    private String createToken(String subject) {
+        return Jwts.builder()
+                .setSubject(subject)
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 10)) // 10 hours expiration
+                .signWith(SignatureAlgorithm.HS256, SECRET_KEY)
+                .compact();
+    }
+
+    public Boolean validateToken(String token, String username) {
+        final String extractedUsername = extractUsername(token);
+        return (extractedUsername.equals(username) && !isTokenExpired(token));
+    }
+}
+
+3. Create a UserDetailService Implementation
+
+package com.bookstoreapi.security;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+
+@Service
+public class MyUserDetailsService implements UserDetailsService {
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        
+        return new User("user", "password", new ArrayList<>());
+    }
+}
+
+4. Create JWT Request and Response Models
+
+package com.bookstoreapi.model;
+
+public class JwtRequest {
+
+    private String username;
+    private String password;
+
+    // Default constructor for JSON Parsing
+    public JwtRequest() {}
+
+    public JwtRequest(String username, String password) {
+        this.username = username;
+        this.password = password;
+    }
+
+    
+}
+
+public class JwtResponse {
+
+    private final String jwtToken;
+
+    public JwtResponse(String jwtToken) {
+        this.jwtToken = jwtToken;
+    }
+
+    public String getJwtToken() {
+        return jwtToken;
+    }
+}
+
+5. Create JWT Request Filter
+
+package com.bookstoreapi.security;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+
+@Component
+public class JwtRequestFilter extends OncePerRequestFilter {
+
+    @Autowired
+    private MyUserDetailsService myUserDetailsService;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+
+        final String authorizationHeader = request.getHeader("Authorization");
+
+        String username = null;
+        String jwtToken = null;
+
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            jwtToken = authorizationHeader.substring(7);
+            username = jwtUtil.extractUsername(jwtToken);
+        }
+
+        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+
+            UserDetails userDetails = this.myUserDetailsService.loadUserByUsername(username);
+
+            if (jwtUtil.validateToken(jwtToken, userDetails.getUsername())) {
+
+                UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken = new UsernamePasswordAuthenticationToken(
+                        userDetails, null, userDetails.getAuthorities());
+                usernamePasswordAuthenticationToken
+                        .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
+            }
+        }
+        chain.doFilter(request, response);
+    }
+}
+
+
+6. Create Authentication Controller
+
+package com.bookstoreapi.controller;
+
+import com.bookstoreapi.model.JwtRequest;
+import com.bookstoreapi.model.JwtResponse;
+import com.bookstoreapi.security.JwtUtil;
+import com.bookstoreapi.security.MyUserDetailsService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class AuthenticationController {
+
+    @Autowired
+    private AuthenticationManager authenticationManager;
+
+    @Autowired
+    private MyUserDetailsService userDetailsService;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @PostMapping("/authenticate")
+    public JwtResponse createAuthenticationToken(@RequestBody JwtRequest jwtRequest) throws Exception {
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(jwtRequest.getUsername(), jwtRequest.getPassword())
+            );
+        } catch (BadCredentialsException e) {
+            throw new Exception("Incorrect username or password", e);
+        }
+
+        final UserDetails userDetails = userDetailsService
+                .loadUserByUsername(jwtRequest.getUsername());
+
+        final String jwt = jwtUtil.generateToken(userDetails.getUsername());
+
+        return new JwtResponse(jwt);
+    }
+}
+
+
+7. Configure Spring Security
+
+package com.bookstoreapi.security;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.builders.WebSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+
+    @Autowired
+    private MyUserDetailsService myUserDetailsService;
+
+    @Autowired
+    private JwtRequestFilter jwtRequestFilter;
+
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth.userDetailsService(myUserDetailsService);
+    }
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.csrf().disable()
+            .authorizeRequests()
+            .antMatchers("/authenticate").permitAll()
+            .antMatchers(HttpMethod.OPTIONS, "/**").permitAll() // Allow CORS pre-flight requests
+            .anyRequest().authenticated()
+            .and().sessionManagement()
+            .sessionCreationPolicy(SessionCreationPolicy.STATELESS);
+
+        http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
+    }
+
+    @Override
+    @Bean
+    public AuthenticationManager authenticationManagerBean() throws Exception {
+        return super.authenticationManagerBean();
+    }
+
+    @Override
+    public void configure(WebSecurity web) throws Exception {
+        web.ignoring().antMatchers("/v2/api-docs", "/configuration/ui",
+                "/swagger-resources/**", "/configuration/security", "/swagger-ui.html", "/webjars/**");
+    }
+}
+
+8. Configure CORS in WebConfig
+
+package com.bookstoreapi.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+public class WebConfig {
+
+    @Bean
+    public WebMvcConfigurer corsConfigurer() {
+        return new WebMvcConfigurer() {
+            @Override
+            public void addCorsMappings(CorsRegistry registry) {
+                registry.addMapping("/**")
+                        .allowedOrigins("http://localhost:3000") // Add your frontend URL here
+                        .allowedMethods("GET", "POST", "PUT", "DELETE")
+                        .allowedHeaders("*")
+                        .allowCredentials(true);
+            }
+        };
+    }
+}
+
+9. Testing the Setup
+
+{
+    "username": "user",
+    "password": "password"
+}
+
+Accessing Secured Endpoints:
+Authorization: Bearer <jwt-token>
+
+

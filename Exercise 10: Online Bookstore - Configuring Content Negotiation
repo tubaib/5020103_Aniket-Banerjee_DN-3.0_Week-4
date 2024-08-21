@@ -1,0 +1,131 @@
+1. Add Actuator Dependency
+<dependencies>
+    <!-- Other dependencies -->
+
+    <!-- Spring Boot Actuator -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+</dependencies>
+
+2. Expose Actuator Endpoints
+# Enable all actuator endpoints
+management.endpoints.web.exposure.include=*
+
+# Customize the base path for actuator endpoints
+management.endpoints.web.base-path=/actuator
+
+# Enable specific endpoints (example)
+# management.endpoints.web.exposure.include=health,info,metrics
+
+# Enable health details
+management.endpoint.health.show-details=always
+
+3. Custom Metrics
+package com.bookstoreapi.config;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.time.Duration;
+
+@Configuration
+public class MetricsConfig {
+
+    @Bean
+    public Timer bookCreationTimer(MeterRegistry registry) {
+        return Timer.builder("book.creation.time")
+                .description("Time taken to create a book")
+                .publishPercentiles(0.5, 0.95)  // percentiles 50th and 95th
+                .minimumExpectedValue(Duration.ofMillis(1))
+                .maximumExpectedValue(Duration.ofSeconds(5))
+                .register(registry);
+    }
+
+    @Bean
+    public Timer customerCreationTimer(MeterRegistry registry) {
+        return Timer.builder("customer.creation.time")
+                .description("Time taken to create a customer")
+                .publishPercentiles(0.5, 0.95)
+                .minimumExpectedValue(Duration.ofMillis(1))
+                .maximumExpectedValue(Duration.ofSeconds(5))
+                .register(registry);
+    }
+}
+Example of Using Custom Metrics in Controller
+package com.bookstoreapi.controller;
+
+import com.bookstoreapi.model.Book;
+import com.bookstoreapi.repository.BookRepository;
+import io.micrometer.core.instrument.Timer;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import javax.validation.Valid;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/books")
+public class BookController {
+
+    @Autowired
+    private BookRepository bookRepository;
+
+    @Autowired
+    private Timer bookCreationTimer;
+
+    @GetMapping
+    public List<Book> getAllBooks() {
+        return bookRepository.findAll();
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Book> getBookById(@PathVariable Long id) {
+        Book book = bookRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Book not found"));
+        return ResponseEntity.ok(book);
+    }
+
+    @PostMapping
+    public Book createBook(@Valid @RequestBody Book book) {
+        return bookCreationTimer.record(() -> bookRepository.save(book));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Book> updateBook(@PathVariable Long id, @Valid @RequestBody Book bookDetails) {
+        Book book = bookRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Book not found"));
+
+        book.setTitle(bookDetails.getTitle());
+        book.setAuthor(bookDetails.getAuthor());
+        book.setPrice(bookDetails.getPrice());
+
+        final Book updatedBook = bookRepository.save(book);
+        return ResponseEntity.ok(updatedBook);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteBook(@PathVariable Long id) {
+        Book book = bookRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Book not found"));
+
+        bookRepository.delete(book);
+        return ResponseEntity.noContent().build();
+    }
+}
+4. Accessing Actuator Endpoints
+After starting your application, you can access the actuator endpoints using your browser or a tool like curl.
+
+Health: http://localhost:8080/actuator/health
+Info: http://localhost:8080/actuator/info
+Metrics: http://localhost:8080/actuator/metrics
+Custom Timer Metric: http://localhost:8080/actuator/metrics/book.creation.time
+
+5. Security Considerations
+# Example: Restrict access to actuator endpoints
+management.endpoints.web.exposure.include=health,info
+management.endpoint.health.show-details=when_authorized

@@ -1,0 +1,188 @@
+1. Add Dependencies
+
+<dependencies>
+    <!-- Spring Boot Starter Web -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <!-- Jackson Dataformat XML -->
+    <dependency>
+        <groupId>com.fasterxml.jackson.dataformat</groupId>
+        <artifactId>jackson-dataformat-xml</artifactId>
+    </dependency>
+
+    <!-- JAXB API for XML -->
+    <dependency>
+        <groupId>javax.xml.bind</groupId>
+        <artifactId>jaxb-api</artifactId>
+    </dependency>
+</dependencies>
+
+2. Configure Content Negotiation
+
+package com.bookstoreapi.config;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.MediaType;
+import org.springframework.web.servlet.config.annotation.ContentNegotiationConfigurer;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+public class WebConfig implements WebMvcConfigurer {
+
+    @Override
+    public void configureContentNegotiation(ContentNegotiationConfigurer configurer) {
+        configurer
+            .favorParameter(true)
+            .parameterName("mediaType")
+            .ignoreAcceptHeader(false)
+            .defaultContentType(MediaType.APPLICATION_JSON)
+            .mediaType("json", MediaType.APPLICATION_JSON)
+            .mediaType("xml", MediaType.APPLICATION_XML);
+    }
+}
+
+3. Annotate Your Entities
+
+package com.bookstoreapi.model;
+
+import javax.persistence.*;
+import javax.validation.constraints.Min;
+import javax.validation.constraints.NotNull;
+import javax.validation.constraints.Size;
+import javax.xml.bind.annotation.XmlRootElement;
+
+@XmlRootElement
+@Entity
+public class Book {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @NotNull
+    @Size(min = 2, max = 100)
+    private String title;
+
+    @NotNull
+    @Size(min = 2, max = 50)
+    private String author;
+
+    @NotNull
+    @Min(0)
+    private Double price;
+
+    @Version
+    private Integer version;
+
+    
+}
+
+Do the same for the Customer entity:
+package com.bookstoreapi.model;
+
+import javax.persistence.*;
+import javax.validation.constraints.Email;
+import javax.validation.constraints.NotNull;
+import javax.validation.constraints.Size;
+import javax.xml.bind.annotation.XmlRootElement;
+
+@XmlRootElement
+@Entity
+public class Customer {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @NotNull
+    @Size(min = 2, max = 50)
+    private String name;
+
+    @NotNull
+    @Email
+    private String email;
+
+    @Version
+    private Integer version;
+
+    
+}
+
+4. Controllers
+Your existing controllers for Book and Customer should automatically support both JSON and XML due to Spring Boot's content negotiation configuration.
+
+For example, if a client sends a GET request with an Accept: application/json header, the response will be in JSON. If the Accept: application/xml header is used, the response will be in XML.
+
+package com.bookstoreapi.controller;
+
+import com.bookstoreapi.model.Book;
+import com.bookstoreapi.repository.BookRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import javax.validation.Valid;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/books")
+public class BookController {
+
+    @Autowired
+    private BookRepository bookRepository;
+
+    @GetMapping
+    public List<Book> getAllBooks() {
+        return bookRepository.findAll();
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Book> getBookById(@PathVariable Long id) {
+        Book book = bookRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Book not found"));
+        return ResponseEntity.ok(book);
+    }
+
+    @PostMapping
+    public Book createBook(@Valid @RequestBody Book book) {
+        return bookRepository.save(book);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Book> updateBook(@PathVariable Long id, @Valid @RequestBody Book bookDetails) {
+        Book book = bookRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Book not found"));
+
+        book.setTitle(bookDetails.getTitle());
+        book.setAuthor(bookDetails.getAuthor());
+        book.setPrice(bookDetails.getPrice());
+
+        final Book updatedBook = bookRepository.save(book);
+        return ResponseEntity.ok(updatedBook);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteBook(@PathVariable Long id) {
+        Book book = bookRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Book not found"));
+
+        bookRepository.delete(book);
+        return ResponseEntity.noContent().build();
+    }
+}
+
+
+5. Testing Content Negotiation
+You can test the content negotiation by sending requests with different Accept headers:
+
+JSON: Use Accept: application/json
+XML: Use Accept: application/xml
+Alternatively, you can use a query parameter to determine the response type:
+
+JSON: GET /api/books?mediaType=json
+XML: GET /api/books?mediaType=xml
+
+

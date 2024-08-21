@@ -1,0 +1,136 @@
+1. Add Spring HATEOAS Dependency
+<dependencies>
+    <!-- Other dependencies -->
+
+    <!-- Spring HATEOAS -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-hateoas</artifactId>
+    </dependency>
+</dependencies>
+
+2. Create HATEOAS Resource Assemblers
+package com.bookstoreapi.assembler;
+
+import com.bookstoreapi.controller.BookController;
+import com.bookstoreapi.model.Book;
+import org.springframework.hateoas.EntityModel;
+import org.springframework.hateoas.server.mvc.RepresentationModelAssemblerSupport;
+import org.springframework.stereotype.Component;
+
+import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.*;
+
+@Component
+public class BookModelAssembler extends RepresentationModelAssemblerSupport<Book, EntityModel<Book>> {
+
+    public BookModelAssembler() {
+        super(BookController.class, EntityModel.class);
+    }
+
+    @Override
+    public EntityModel<Book> toModel(Book book) {
+        return EntityModel.of(book,
+            linkTo(methodOn(BookController.class).getBookById(book.getId())).withSelfRel(),
+            linkTo(methodOn(BookController.class).getAllBooks()).withRel("books"));
+    }
+}
+3. Modify Controllers to Return HATEOAS-Compliant Responses
+package com.bookstoreapi.controller;
+
+import com.bookstoreapi.assembler.BookModelAssembler;
+import com.bookstoreapi.model.Book;
+import com.bookstoreapi.repository.BookRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.hateoas.CollectionModel;
+import org.springframework.hateoas.EntityModel;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.*;
+
+@RestController
+@RequestMapping("/api/books")
+public class BookController {
+
+    @Autowired
+    private BookRepository bookRepository;
+
+    @Autowired
+    private BookModelAssembler assembler;
+
+    @GetMapping
+    public CollectionModel<EntityModel<Book>> getAllBooks() {
+        List<EntityModel<Book>> books = bookRepository.findAll().stream()
+            .map(assembler::toModel)
+            .collect(Collectors.toList());
+
+        return CollectionModel.of(books,
+            linkTo(methodOn(BookController.class).getAllBooks()).withSelfRel());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<EntityModel<Book>> getBookById(@PathVariable Long id) {
+        Book book = bookRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Book not found"));
+
+        return ResponseEntity.ok(assembler.toModel(book));
+    }
+
+    @PostMapping
+    public ResponseEntity<EntityModel<Book>> createBook(@RequestBody Book book) {
+        Book savedBook = bookRepository.save(book);
+
+        return ResponseEntity.created(
+            linkTo(methodOn(BookController.class).getBookById(savedBook.getId())).toUri())
+            .body(assembler.toModel(savedBook));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<EntityModel<Book>> updateBook(@PathVariable Long id, @RequestBody Book bookDetails) {
+        Book book = bookRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Book not found"));
+
+        book.setTitle(bookDetails.getTitle());
+        book.setAuthor(bookDetails.getAuthor());
+        book.setPrice(bookDetails.getPrice());
+
+        Book updatedBook = bookRepository.save(book);
+
+        return ResponseEntity.ok(assembler.toModel(updatedBook));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteBook(@PathVariable Long id) {
+        Book book = bookRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Book not found"));
+
+        bookRepository.delete(book);
+
+        return ResponseEntity.noContent().build();
+    }
+}
+4. Hypermedia-Driven APIs
+In the above implementation:
+
+Self Links: Each EntityModel includes a self-link to its own resource (e.g., linkTo(methodOn(BookController.class).getBookById(book.getId())).withSelfRel()).
+Collection Links: The collection of books includes a self-link to the entire collection.
+Navigation: Clients can now navigate through resources by following the links provided in the responses.
+
+Example Response
+{
+    "id": 1,
+    "title": "Book One",
+    "author": "Author One",
+    "price": 19.99,
+    "_links": {
+        "self": {
+            "href": "http://localhost:8080/api/books/1"
+        },
+        "books": {
+            "href": "http://localhost:8080/api/books"
+        }
+    }
+}

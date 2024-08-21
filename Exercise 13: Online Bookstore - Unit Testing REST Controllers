@@ -1,0 +1,200 @@
+1. JUnit and Mockito Setup
+
+<dependencies>
+    <!-- Other dependencies -->
+
+    <!-- Spring Boot Starter Test -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <scope>test</scope>
+        <exclusions>
+            <exclusion>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+            </exclusion>
+        </exclusions>
+    </dependency>
+
+    <!-- Mockito -->
+    <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-core</artifactId>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
+
+2. Writing Unit Tests with MockMvc
+
+package com.bookstoreapi.controller;
+
+import com.bookstoreapi.model.Book;
+import com.bookstoreapi.repository.BookRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/books")
+public class BookController {
+
+    @Autowired
+    private BookRepository bookRepository;
+
+    @GetMapping
+    public List<Book> getAllBooks() {
+        return bookRepository.findAll();
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Book> getBookById(@PathVariable Long id) {
+        Book book = bookRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Book not found"));
+        return ResponseEntity.ok(book);
+    }
+
+    @PostMapping
+    public Book createBook(@RequestBody Book book) {
+        return bookRepository.save(book);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Book> updateBook(@PathVariable Long id, @RequestBody Book bookDetails) {
+        Book book = bookRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Book not found"));
+
+        book.setTitle(bookDetails.getTitle());
+        book.setAuthor(bookDetails.getAuthor());
+        book.setPrice(bookDetails.getPrice());
+
+        final Book updatedBook = bookRepository.save(book);
+        return ResponseEntity.ok(updatedBook);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteBook(@PathVariable Long id) {
+        Book book = bookRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Book not found"));
+
+        bookRepository.delete(book);
+        return ResponseEntity.noContent().build();
+    }
+}
+
+BookControllerTest.java
+
+package com.bookstoreapi.controller;
+
+import com.bookstoreapi.model.Book;
+import com.bookstoreapi.repository.BookRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
+
+import java.util.Arrays;
+import java.util.Optional;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@WebMvcTest(BookController.class)
+public class BookControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Mock
+    private BookRepository bookRepository;
+
+    @InjectMocks
+    private BookController bookController;
+
+    @BeforeEach
+    public void setUp() {
+        MockitoAnnotations.openMocks(this);
+    }
+
+    @Test
+    public void testGetAllBooks() throws Exception {
+        Book book1 = new Book(1L, "Book One", "Author One", 19.99);
+        Book book2 = new Book(2L, "Book Two", "Author Two", 29.99);
+
+        when(bookRepository.findAll()).thenReturn(Arrays.asList(book1, book2));
+
+        mockMvc.perform(get("/api/books")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].title").value("Book One"))
+                .andExpect(jsonPath("$[1].title").value("Book Two"));
+    }
+
+    @Test
+    public void testGetBookById() throws Exception {
+        Book book = new Book(1L, "Book One", "Author One", 19.99);
+
+        when(bookRepository.findById(1L)).thenReturn(Optional.of(book));
+
+        mockMvc.perform(get("/api/books/1")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Book One"));
+    }
+
+    @Test
+    public void testCreateBook() throws Exception {
+        Book book = new Book(1L, "New Book", "New Author", 39.99);
+
+        when(bookRepository.save(any(Book.class))).thenReturn(book);
+
+        mockMvc.perform(post("/api/books")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"New Book\",\"author\":\"New Author\",\"price\":39.99}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("New Book"));
+    }
+
+    @Test
+    public void testUpdateBook() throws Exception {
+        Book book = new Book(1L, "Book One", "Author One", 19.99);
+        Book updatedBook = new Book(1L, "Updated Book", "Updated Author", 49.99);
+
+        when(bookRepository.findById(1L)).thenReturn(Optional.of(book));
+        when(bookRepository.save(any(Book.class))).thenReturn(updatedBook);
+
+        mockMvc.perform(put("/api/books/1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Updated Book\",\"author\":\"Updated Author\",\"price\":49.99}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Updated Book"));
+    }
+
+    @Test
+    public void testDeleteBook() throws Exception {
+        Book book = new Book(1L, "Book One", "Author One", 19.99);
+
+        when(bookRepository.findById(1L)).thenReturn(Optional.of(book));
+
+        mockMvc.perform(delete("/api/books/1")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNoContent());
+    }
+}
+
+3. Ensuring Comprehensive Test Coverage
+To ensure comprehensive test coverage:
+
+Test All Scenarios: Write tests for all possible scenarios, including edge cases and error handling (e.g., what happens if a book is not found).
+Mock External Dependencies: Use Mockito to mock dependencies like repositories and services, allowing you to test controllers in isolation.
+Use @WebMvcTest: This annotation helps in testing only the web layer, focusing on the controller logic without starting the full application context.
+Verify Responses: Use jsonPath to verify that the response JSON matches expectations.

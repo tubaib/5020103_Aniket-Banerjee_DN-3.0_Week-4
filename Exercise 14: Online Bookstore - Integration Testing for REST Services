@@ -1,0 +1,129 @@
+1. Spring Test Setup
+
+<dependencies>
+    <!-- Other dependencies -->
+
+    <!-- Spring Boot Starter Test -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+
+    <!-- H2 Database -->
+    <dependency>
+        <groupId>com.h2database</groupId>
+        <artifactId>h2</artifactId>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
+
+2. Writing Integration Tests with MockMvc
+package com.bookstoreapi.integration;
+
+import com.bookstoreapi.model.Book;
+import com.bookstoreapi.repository.BookRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
+public class BookControllerIntegrationTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private BookRepository bookRepository;
+
+    @BeforeEach
+    public void setUp() {
+        bookRepository.deleteAll();
+    }
+
+    @Test
+    public void testGetAllBooks() throws Exception {
+        Book book1 = new Book("Book One", "Author One", 19.99);
+        Book book2 = new Book("Book Two", "Author Two", 29.99);
+        bookRepository.save(book1);
+        bookRepository.save(book2);
+
+        mockMvc.perform(get("/api/books")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].title").value("Book One"))
+                .andExpect(jsonPath("$[1].title").value("Book Two"));
+    }
+
+    @Test
+    public void testGetBookById() throws Exception {
+        Book book = new Book("Book One", "Author One", 19.99);
+        bookRepository.save(book);
+
+        mockMvc.perform(get("/api/books/" + book.getId())
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Book One"));
+    }
+
+    @Test
+    public void testCreateBook() throws Exception {
+        mockMvc.perform(post("/api/books")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"New Book\",\"author\":\"New Author\",\"price\":39.99}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("New Book"))
+                .andExpect(jsonPath("$.author").value("New Author"))
+                .andExpect(jsonPath("$.price").value(39.99));
+    }
+
+    @Test
+    public void testUpdateBook() throws Exception {
+        Book book = new Book("Book One", "Author One", 19.99);
+        bookRepository.save(book);
+
+        mockMvc.perform(put("/api/books/" + book.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Updated Book\",\"author\":\"Updated Author\",\"price\":49.99}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Updated Book"))
+                .andExpect(jsonPath("$.author").value("Updated Author"))
+                .andExpect(jsonPath("$.price").value(49.99));
+    }
+
+    @Test
+    public void testDeleteBook() throws Exception {
+        Book book = new Book("Book One", "Author One", 19.99);
+        bookRepository.save(book);
+
+        mockMvc.perform(delete("/api/books/" + book.getId())
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/books/" + book.getId())
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound());
+    }
+}
+
+3. Database Integration
+In the above test class:
+
+@SpringBootTest: This annotation loads the full application context, which includes your web layer, service layer, and data layer.
+@AutoConfigureMockMvc: This annotation allows MockMvc to be auto-configured and injected into your test class.
+@Transactional: This ensures that each test runs within a transaction, which is rolled back after the test. This helps maintain a consistent state and prevents side effects between tests.
+H2 Database: Since H2 is an in-memory database, it provides a lightweight and fast way to test database interactions. Spring Boot automatically configures H2 when it's in the classpath and no other DataSource is configured.
+
+4. Running Tests
+
+mvn test

@@ -1,0 +1,112 @@
+1. Add Swagger Dependency
+
+<dependencies>
+    <!-- Other dependencies -->
+
+    <!-- Springdoc OpenAPI for Swagger UI -->
+    <dependency>
+        <groupId>org.springdoc</groupId>
+        <artifactId>springdoc-openapi-ui</artifactId>
+        <version>1.7.0</version>
+    </dependency>
+</dependencies>
+
+
+2. Document Endpoints
+package com.bookstoreapi.controller;
+
+import com.bookstoreapi.model.Book;
+import com.bookstoreapi.repository.BookRepository;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/books")
+public class BookController {
+
+    @Autowired
+    private BookRepository bookRepository;
+
+    @Operation(summary = "Get all books")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Found the books",
+            content = { @Content(mediaType = "application/json",
+            schema = @Schema(implementation = Book.class)) }),
+        @ApiResponse(responseCode = "404", description = "Books not found",
+            content = @Content) })
+    @GetMapping
+    public List<Book> getAllBooks() {
+        return bookRepository.findAll();
+    }
+
+    @Operation(summary = "Get a book by its id")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Found the book",
+            content = { @Content(mediaType = "application/json",
+            schema = @Schema(implementation = Book.class)) }),
+        @ApiResponse(responseCode = "404", description = "Book not found",
+            content = @Content) })
+    @GetMapping("/{id}")
+    public ResponseEntity<Book> getBookById(@PathVariable Long id) {
+        Book book = bookRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Book not found"));
+        return ResponseEntity.ok(book);
+    }
+
+    @Operation(summary = "Create a new book")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Book created",
+            content = { @Content(mediaType = "application/json",
+            schema = @Schema(implementation = Book.class)) }) })
+    @PostMapping
+    public Book createBook(@RequestBody Book book) {
+        return bookRepository.save(book);
+    }
+
+    @Operation(summary = "Update an existing book")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Book updated",
+            content = { @Content(mediaType = "application/json",
+            schema = @Schema(implementation = Book.class)) }),
+        @ApiResponse(responseCode = "404", description = "Book not found",
+            content = @Content) })
+    @PutMapping("/{id}")
+    public ResponseEntity<Book> updateBook(@PathVariable Long id, @RequestBody Book bookDetails) {
+        Book book = bookRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Book not found"));
+
+        book.setTitle(bookDetails.getTitle());
+        book.setAuthor(bookDetails.getAuthor());
+        book.setPrice(bookDetails.getPrice());
+
+        final Book updatedBook = bookRepository.save(book);
+        return ResponseEntity.ok(updatedBook);
+    }
+
+    @Operation(summary = "Delete a book by its id")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "204", description = "Book deleted"),
+        @ApiResponse(responseCode = "404", description = "Book not found",
+            content = @Content) })
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteBook(@PathVariable Long id) {
+        Book book = bookRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Book not found"));
+
+        bookRepository.delete(book);
+        return ResponseEntity.noContent().build();
+    }
+}
+
+3. API Documentation
+
+http://localhost:8080/swagger-ui.html
+
